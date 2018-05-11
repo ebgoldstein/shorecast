@@ -25,34 +25,71 @@ shorelineData <- read_delim("Data/Case1/Shorelines/Camera/Averaged shoreline dat
 
 #load SL
 ####
-
 #drop mins and sec wave data 
 waves <- waves %>%
   select(-one_of(c("Min","Sec")))
 
 #drop mins and sec tide data 
 tides <- tides %>%
+  rename(tide = 'tide[m]') %>%
   select(-one_of(c("Min","Sec")))
 
 #drop mins and sec from shoreline data and rename shoreline position column.
 shoreline <- shorelineData %>%
-  rename('Average_Shoreline[m]' = 'Average[m]') %>%
+  rename(Average_Shoreline = 'Average[m]') %>%
   select(-one_of(c("Min","Sec")))
 
 ####
+#for each day find the max + min tide
+daily_tides <- tides %>% 
+  group_by(Year,Month,Day) %>% 
+  summarize(maxT=max(tide),minT=min(tide))
+
+#find mean shoreline for each day
+daily_shoreline <- shoreline %>% 
+  group_by(Year,Month,Day) %>% 
+  summarize(AverageShoreline=mean(Average_Shoreline))
+
+#find max,min,mean waves,period, direction for each day (Hs,Tp, Dir)
+#dir is not correct yet because of 360 to 0...
+daily_waves <- waves %>%
+  group_by(Year,Month,Day) %>%
+  summarize(maxHs = max(`Hs[m]`),
+            minHs = min(`Hs[m]`),
+            meanHs = mean(`Hs[m]`),
+            maxTs = max(`Tp[s]`),
+            minTs = min(`Tp[s]`),
+            meanTs = mean(`Tp[s]`),
+            maxD = max(`Dir[°]`),
+            minD = min(`Dir[°]`),
+            meanD = mean(`Dir[°]`)
+            )
+
+########
 
 #join shoreline (x) to tide (y). 
-Shore_and_Tide <- left_join(shoreline,tides,by = c("Year","Month","Day","Hour[NZST]"))
+daily_shore_and_tide <- left_join(daily_shoreline,daily_tides,by = c("Year","Month","Day"))
 
-#simplest case is to join waves to this 
-#(even though the waves at the moment may not be represenative of teh day (not min, not mean, not max,etc..)
-Shore_Tide_Wave <- left_join(Shore_and_Tide,waves,by = c("Year","Month","Day","Hour[NZST]"))
+#join waves
+Shore_Tide_Wave <- left_join(daily_shore_and_tide,daily_waves,by = c("Year","Month","Day"))
+
+#put a timestamp
+Shore_Tide_Wave_time <- Shore_Tide_Wave %>%
+  add_column(time = ymd(str_c(Shore_Tide_Wave$Year,'-',Shore_Tide_Wave$Month,'-',Shore_Tide_Wave$Day)))
+
+####
+#plots
+ggplot(data= Shore_Tide_Wave_time) +
+  geom_line(aes(time,AverageShoreline))
+
+# ggplot(data= Shore_Tide_Wave_time) +
+#   geom_line(aes(time,maxT)) +
+#   geom_line(aes(time,minT))
+# 
+# ggplot(data= Shore_Tide_Wave_time) +
+#   geom_line(aes(time,maxHs)) +
+#   geom_line(aes(time,minHs))
 
 
-#take the mean shoreline of each day
-
-#take the max waves for that day
-
-
-#join
-#recover plots
+####
+#keras info will go here
