@@ -89,20 +89,17 @@ ggplot(data= Shore_Tide_Wave_time) +
 
 
 ####
-#keras info... 
+#keras info
 #Some helpful info to keep handy:
 #https://keras.rstudio.com
 #https://tensorflow.rstudio.com/keras/
-
-#the following code is straight up from the website below:
 #following: https://tensorflow.rstudio.com/blog/time-series-forecasting-with-recurrent-neural-networks.html
-#... will be modified as i learn..
 
 #remove the 3 date columns
 data <- data.matrix(Shore_Tide_Wave_time[,-1:-3])
 
 #subtract mean of TS and divide by SD. 
-training_data_length <- 3000
+training_data_length <- 2000
 train_data <- data[1:training_data_length,]
 mean <- apply(train_data, 2, mean)
 std <- apply(train_data, 2, sd)
@@ -132,55 +129,23 @@ generator <- function(data, lookback, delay, min_index, max_index,
       indices <- seq(rows[[j]] - lookback, rows[[j]]-1, 
                      length.out = dim(samples)[[2]])
       samples[j,,] <- data[indices,]
-      targets[[j]] <- data[rows[[j]] + delay,2]
+      targets[[j]] <- data[rows[[j]] + delay,1]
     }            
     
     list(samples, targets)
   }
 }
 
-lookback <- 365
+lookback <- 50
 step <- 1
 delay <- 1
-batch_size <- 400
-
-train_gen <- generator(
-  data,
-  lookback = lookback,
-  delay = delay,
-  min_index = 1,
-  max_index = training_data_length,
-  shuffle = TRUE,
-  step = step, 
-  batch_size = batch_size
-)
-
-val_gen = generator(
-  data,
-  lookback = lookback,
-  delay = delay,
-  min_index = training_data_length+1,
-  max_index = training_data_length+1000,
-  step = step,
-  batch_size = batch_size
-)
-
-test_gen <- generator(
-  data,
-  lookback = lookback,
-  delay = delay,
-  min_index = training_data_length+1000+1,
-  max_index = NULL,
-  step = step,
-  batch_size = batch_size
-)
+batch_size <- 100
 
 # How many steps to draw from val_gen in order to see the entire validation set
 val_steps <- ((training_data_length+1000) - (training_data_length+1) - lookback) / batch_size
 
 # How many steps to draw from test_gen in order to see the entire test set
 test_steps <- (nrow(data) - (training_data_length+1000+1) - lookback) / batch_size
-
 
 model <- keras_model_sequential() %>% 
   layer_gru(units = 32, input_shape = list(NULL, dim(data)[[-1]])) %>% 
@@ -200,4 +165,3 @@ history <- model %>% fit_generator(
 )
 
 plot(history)
-
