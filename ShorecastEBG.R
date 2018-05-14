@@ -4,9 +4,6 @@
 #EBG 5/2018
 #MIT license
 #
-#Some helpful info to keep handy:
-#https://keras.rstudio.com
-#https://tensorflow.rstudio.com/keras/
 
 library(keras)
 library(tidyverse)
@@ -92,4 +89,115 @@ ggplot(data= Shore_Tide_Wave_time) +
 
 
 ####
-#keras info will go here
+#keras info... 
+#Some helpful info to keep handy:
+#https://keras.rstudio.com
+#https://tensorflow.rstudio.com/keras/
+
+#the following code is straight up from the website below:
+#following: https://tensorflow.rstudio.com/blog/time-series-forecasting-with-recurrent-neural-networks.html
+#... will be modified as i learn..
+
+#remove the 3 date columns
+data <- data.matrix(Shore_Tide_Wave_time[,-1:-3])
+
+#subtract mean of TS and divide by SD. 
+training_data_length <- 3000
+train_data <- data[1:training_data_length,]
+mean <- apply(train_data, 2, mean)
+std <- apply(train_data, 2, sd)
+data <- scale(data, center = mean, scale = std)
+
+generator <- function(data, lookback, delay, min_index, max_index,
+                      shuffle = FALSE, batch_size = 400, step = 1) {
+  if (is.null(max_index))
+    max_index <- nrow(data) - delay - 1
+  i <- min_index + lookback
+  function() {
+    if (shuffle) {
+      rows <- sample(c((min_index+lookback):max_index), size = batch_size)
+    } else {
+      if (i + batch_size >= max_index)
+        i <<- min_index + lookback
+      rows <- c(i:min(i+batch_size-1, max_index))
+      i <<- i + length(rows)
+    }
+    
+    samples <- array(0, dim = c(length(rows), 
+                                lookback / step,
+                                dim(data)[[-1]]))
+    targets <- array(0, dim = c(length(rows)))
+    
+    for (j in 1:length(rows)) {
+      indices <- seq(rows[[j]] - lookback, rows[[j]]-1, 
+                     length.out = dim(samples)[[2]])
+      samples[j,,] <- data[indices,]
+      targets[[j]] <- data[rows[[j]] + delay,2]
+    }            
+    
+    list(samples, targets)
+  }
+}
+
+lookback <- 365
+step <- 1
+delay <- 1
+batch_size <- 400
+
+train_gen <- generator(
+  data,
+  lookback = lookback,
+  delay = delay,
+  min_index = 1,
+  max_index = training_data_length,
+  shuffle = TRUE,
+  step = step, 
+  batch_size = batch_size
+)
+
+val_gen = generator(
+  data,
+  lookback = lookback,
+  delay = delay,
+  min_index = training_data_length+1,
+  max_index = training_data_length+1000,
+  step = step,
+  batch_size = batch_size
+)
+
+test_gen <- generator(
+  data,
+  lookback = lookback,
+  delay = delay,
+  min_index = training_data_length+1000+1,
+  max_index = NULL,
+  step = step,
+  batch_size = batch_size
+)
+
+# How many steps to draw from val_gen in order to see the entire validation set
+val_steps <- ((training_data_length+1000) - (training_data_length+1) - lookback) / batch_size
+
+# How many steps to draw from test_gen in order to see the entire test set
+test_steps <- (nrow(data) - (training_data_length+1000+1) - lookback) / batch_size
+
+
+model <- keras_model_sequential() %>% 
+  layer_gru(units = 32, input_shape = list(NULL, dim(data)[[-1]])) %>% 
+  layer_dense(units = 1)
+
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "mae"
+)
+
+history <- model %>% fit_generator(
+  train_gen,
+  steps_per_epoch = 500,
+  epochs = 20,
+  validation_data = val_gen,
+  validation_steps = val_steps
+)
+
+plot(history)
+
