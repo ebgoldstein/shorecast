@@ -95,17 +95,10 @@ ggplot(data= Shore_Tide_Wave_time) +
 #https://tensorflow.rstudio.com/keras/
 #following: https://tensorflow.rstudio.com/blog/time-series-forecasting-with-recurrent-neural-networks.html
 
-# Top predict shoreline (t+1), we use the shoreline (t), and all hydrodynamics (t+1).
-# so offset the shoreline and delete the first and last row.
-offset_Shore_Tide_Wave_time <- Shore_Tide_Wave_time %>% 
-  add_column(previous_shoreline = lag(Shore_Tide_Wave_time$AverageShoreline, 1))
-
-#remove the 3 date columns and shoreline (t)
-data <- data.matrix(offset_Shore_Tide_Wave_time[,-1:-4])
+#remove the 3 date columns 
+data <- data.matrix(Shore_Tide_Wave_time[,-1:-3])
 #remove time column
-data <- data.matrix(data[,-12])
-#remove top row
-data <- data.matrix(data[-1,])
+data <- data.matrix(data[,-16])
 
 #subtract mean of TS and divide by SD. 
 training_data_length <- 2000
@@ -138,24 +131,24 @@ generator <- function(data, lookback, delay, min_index, max_index,
       indices <- seq(rows[[j]] - lookback, rows[[j]]-1, 
                      length.out = dim(samples)[[2]])
       samples[j,,] <- data[indices,]
-      targets[[j]] <- data[rows[[j]] + delay,12]
+      targets[[j]] <- data[rows[[j]] + delay,1]
     }            
     
     list(samples, targets)
   }
 }
 
-lookback <- 50
+lookback <- 100
 step <- 1
 delay <- 1
-batch_size <- 100
+batch_size <- 200
 
 train_gen <- generator(
   data,
   lookback = lookback,
   delay = delay,
   min_index = 1,
-  max_index = training_data_length+1000,
+  max_index = training_data_length,
   shuffle = TRUE,
   step = step, 
   batch_size = batch_size
@@ -166,7 +159,7 @@ val_gen = generator(
   lookback = lookback,
   delay = delay,
   min_index = training_data_length+1,
-  max_index = training_data_length+2000,
+  max_index = training_data_length+1000,
   step = step,
   batch_size = batch_size
 )
@@ -175,7 +168,7 @@ test_gen <- generator(
   data,
   lookback = lookback,
   delay = delay,
-  min_index = training_data_length+2000+1,
+  min_index = training_data_length+1000+1,
   max_index = NULL,
   step = step,
   batch_size = batch_size
@@ -187,11 +180,10 @@ val_steps <- ((training_data_length+1000) - (training_data_length+1) - lookback)
 # How many steps to draw from test_gen in order to see the entire test set
 test_steps <- (nrow(data) - (training_data_length+1000+1) - lookback) / batch_size
 
-#dropout model:
+#no dropout model:
 
 model <- keras_model_sequential() %>% 
-  layer_gru(units = 32, dropout = 0.2, recurrent_dropout = 0.2,
-            input_shape = list(NULL, dim(data)[[-1]])) %>% 
+  layer_gru(units = 32, input_shape = list(NULL, dim(data)[[-1]])) %>% 
   layer_dense(units = 1)
 
 model %>% compile(
@@ -201,11 +193,10 @@ model %>% compile(
 
 history <- model %>% fit_generator(
   train_gen,
-  steps_per_epoch = 500,
-  epochs = 40,
+  steps_per_epoch = 100,
+  epochs = 20,
   validation_data = val_gen,
   validation_steps = val_steps
 )
 
 plot(history)
-
