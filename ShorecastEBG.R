@@ -138,10 +138,10 @@ generator <- function(data, lookback, delay, min_index, max_index,
   }
 }
 
-lookback <- 100
+lookback <- 50
 step <- 1
 delay <- 1
-batch_size <- 200
+batch_size <- 400
 
 train_gen <- generator(
   data,
@@ -180,11 +180,17 @@ val_steps <- ((training_data_length+1000) - (training_data_length+1) - lookback)
 # How many steps to draw from test_gen in order to see the entire test set
 test_steps <- (nrow(data) - (training_data_length+1000+1) - lookback) / batch_size
 
-#no dropout model:
+#dropout model:
+
+#model <- keras_model_sequential() %>% 
+#  layer_gru(units = 32, dropout = 0.2, recurrent_dropout = 0.2,
+#            input_shape = list(NULL, dim(data)[[-1]])) %>% 
+#  layer_dense(units = 1)
 
 model <- keras_model_sequential() %>% 
-  layer_gru(units = 32, input_shape = list(NULL, dim(data)[[-1]])) %>% 
+  layer_lstm(units = 32, input_shape = list(NULL, dim(data)[[-1]])) %>% 
   layer_dense(units = 1)
+
 
 model %>% compile(
   optimizer = optimizer_rmsprop(),
@@ -193,8 +199,8 @@ model %>% compile(
 
 history <- model %>% fit_generator(
   train_gen,
-  steps_per_epoch = 100,
-  epochs = 20,
+  steps_per_epoch = 500,
+  epochs = 40,
   validation_data = val_gen,
   validation_steps = val_steps
 )
