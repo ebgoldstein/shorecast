@@ -100,27 +100,25 @@ data <- data.matrix(Shore_Tide_Wave_time[,-1:-3])
 #remove time column
 data <- data.matrix(data[,-16])
 
-#subtract mean of TS and divide by SD. 
+#subtract using the training data, take the mean 
+#and SD of all variables and normalize 
 training_data_length <- 2000
 train_data <- data[1:training_data_length,]
 mean <- apply(train_data, 2, mean)
 std <- apply(train_data, 2, sd)
 data <- scale(data, center = mean, scale = std)
 
+
 generator <- function(data, lookback, delay, min_index, max_index,
-                      shuffle = FALSE, batch_size = 400, step = 1) {
+                      shuffle = FALSE, batch_size, step ) {
   if (is.null(max_index))
     max_index <- nrow(data) - delay - 1
   i <- min_index + lookback
   function() {
-    if (shuffle) {
-      rows <- sample(c((min_index+lookback):max_index), size = batch_size)
-    } else {
-      if (i + batch_size >= max_index)
-        i <<- min_index + lookback
-      rows <- c(i:min(i+batch_size-1, max_index))
-      i <<- i + length(rows)
-    }
+    if (i + batch_size >= max_index)
+      i <<- min_index + lookback
+    rows <- c(i:min(i+batch_size-1, max_index))
+    i <<- i + length(rows)
     
     samples <- array(0, dim = c(length(rows), 
                                 lookback / step,
@@ -138,10 +136,10 @@ generator <- function(data, lookback, delay, min_index, max_index,
   }
 }
 
-lookback <- 50
-step <- 1
-delay <- 1
-batch_size <- 400
+lookback <- 50 # # of timesteps to refer to
+step <- 1 #How many step between each sample  (1 day)
+delay <- 1 #timesteps in the future for the target (1 day)
+batch_size <- 100 #samples per batch
 
 train_gen <- generator(
   data,
@@ -149,7 +147,6 @@ train_gen <- generator(
   delay = delay,
   min_index = 1,
   max_index = training_data_length,
-  shuffle = TRUE,
   step = step, 
   batch_size = batch_size
 )
@@ -188,13 +185,13 @@ test_steps <- (nrow(data) - (training_data_length+1000+1) - lookback) / batch_si
 #  layer_dense(units = 1)
 
 model <- keras_model_sequential() %>% 
-  layer_lstm(units = 32, input_shape = list(NULL, dim(data)[[-1]])) %>% 
+  layer_lstm(units = 20, input_shape = list(NULL, dim(data)[[-1]])) %>% 
   layer_dense(units = 1)
 
 
 model %>% compile(
   optimizer = optimizer_rmsprop(),
-  loss = "mae"
+  loss = "mse"
 )
 
 history <- model %>% fit_generator(
