@@ -1,4 +1,4 @@
-%Predictor2 (DS)
+%Predictor
 close all
 clear all
 clc
